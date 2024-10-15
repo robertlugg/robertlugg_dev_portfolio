@@ -1,0 +1,14 @@
+[project]
+name = "leetcode_75"
+version = "0.1.0"
+description = "My implementations of the Blind 75 Leetcode problems"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "ipython>=8.28.0",
+    "matplotlib>=3.9.2",
+    "mypy>=1.11.2",
+    "numpy>=2.1.1",
+    "pyqt5>=5.15.11",
+    "scipy>=1.14.1",
+]
