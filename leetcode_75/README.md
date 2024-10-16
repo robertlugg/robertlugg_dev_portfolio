@@ -25,7 +25,7 @@ This process has not only strengthened my problem-solving abilities but also hon
 
 Each Python file is a stand-alone program and can be run using:
 ```bash
-python leet_123_example.py
+uv run leet_123_example.py
 ```
 The requirements for running the code are minimal. If you'd like to recreate my environment, follow the steps below:
 
@@ -34,9 +34,9 @@ The requirements for running the code are minimal. If you'd like to recreate my 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
-2. Install the required dependencies
+2. Install the required dependencies by running a dummy python file to trigger package install
 ```bash
-uv setup
+uv run placeholder.py
 ```
 3. Activate the virtual environment
 ```bash

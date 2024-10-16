@@ -33,7 +33,16 @@ from dataclasses import dataclass
 
 class Solution:
     def productExceptSelf(self, nums: List[int]) -> List[int]:
-        return [1,2,3]
+        ret = [1] * len(nums)
+        forward_product = 1
+        for idx in range(0, len(nums)):
+            ret[idx] = forward_product
+            forward_product *= nums[idx]
+        reverse_product = 1
+        for idx in range(len(nums)-1, -1, -1):
+            ret[idx] *= reverse_product
+            reverse_product *= nums[idx]
+        return ret
     
 @dataclass
 class TestCase:
