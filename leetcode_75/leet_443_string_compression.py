@@ -44,7 +44,7 @@ class Solution:
         num_consecutive = 0
         insertion_index = 0 # Where to put the results within the chars list
         for char in chars:
-            print(f'{chars}\n{char}: {current_char} {num_consecutive} {insertion_index}')
+            # print(f'{chars}\n{char}: {current_char} {num_consecutive} {insertion_index}')
             if char == current_char:
                 num_consecutive += 1
                 continue
@@ -66,7 +66,7 @@ class Solution:
                 for digit in num_consecutive_as_string:
                     chars[insertion_index] = digit
                     insertion_index += 1
-        print(chars)
+        # print(chars)
         return insertion_index
 
     
