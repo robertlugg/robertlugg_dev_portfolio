@@ -51,7 +51,6 @@ class Solution:
             if num not in seen_numbers.keys():
                 seen_numbers[num] = 0
             seen_numbers[num] += 1
-
         return operation_count
 
 @dataclass
