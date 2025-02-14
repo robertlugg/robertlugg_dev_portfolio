@@ -1,0 +1,11 @@
+listen
+silent
+enlist
+rat
+tar
+art
+god
+dog
+evil
+vile
+live

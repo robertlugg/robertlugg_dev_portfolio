@@ -1,0 +1,54 @@
+# Compiled object files, binaries, and libraries (C++)
+*.o
+*.obj
+*.so
+*.dll
+*.dylib
+*.a
+*.lib
+*.exe
+*.out
+
+# CMake and Makefile artifacts
+CMakeFiles/
+CMakeCache.txt
+*.cmake
+Makefile
+*.ninja
+
+# Debug and logs
+*.log
+*.dbg
+*.pdb
+*.lprof
+
+# Python cache and compiled files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Virtual environments (Python)
+venv/
+.env/
+*.venv
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE and Editor specific files
+.vscode/
+.idea/
+*.swp
+*.swo
+*.sublime-workspace
+*.sublime-project
+
+# macOS and Windows system files
+.DS_Store
+Thumbs.db
+
+# Git and build directories
+.git/
+build/
+dist/
