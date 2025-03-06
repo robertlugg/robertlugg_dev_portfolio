@@ -12,7 +12,7 @@ import {
   FormControl,
   InputLabel,
   Select,
-  MenuItem
+  MenuItem,
 } from "@mui/material";
 
 interface HyperparameterTableProps {
@@ -20,10 +20,13 @@ interface HyperparameterTableProps {
   setAcquisitionFn: (fn: string) => void;
 }
 
-const HyperparameterTable: FC<HyperparameterTableProps> = ({ acquisitionFn, setAcquisitionFn }) => (
+const HyperparameterTable: FC<HyperparameterTableProps> = ({
+  acquisitionFn,
+  setAcquisitionFn,
+}) => (
   <Paper sx={{ padding: 2 }}>
     <Typography variant="h6">Hyperparameters</Typography>
-    
+
     {/* Acquisition function selection */}
     <FormControl fullWidth sx={{ my: 2 }}>
       <InputLabel id="acquisition-label">Acquisition Function</InputLabel>
@@ -38,7 +41,7 @@ const HyperparameterTable: FC<HyperparameterTableProps> = ({ acquisitionFn, setA
         <MenuItem value="PI">Probability of Improvement (PI)</MenuItem>
       </Select>
     </FormControl>
-    
+
     <TableContainer>
       <Table>
         <TableHead>

@@ -8,7 +8,11 @@ interface RMSChartProps {
   setStepIndex: (newStep: number) => void;
 }
 
-const RMSChart: FC<RMSChartProps> = ({ rmsErrors, stepIndex, setStepIndex }) => {
+const RMSChart: FC<RMSChartProps> = ({
+  rmsErrors,
+  stepIndex,
+  setStepIndex,
+}) => {
   // Create X array = [0, 1, 2, ...]
   const xValues = Array.from({ length: rmsErrors.length }, (_, i) => i);
 
@@ -24,8 +28,8 @@ const RMSChart: FC<RMSChartProps> = ({ rmsErrors, stepIndex, setStepIndex }) => 
             y: rmsErrors,
             type: "scatter",
             mode: "lines+markers",
-            name: "RMS Error"
-          }
+            name: "RMS Error",
+          },
         ]}
         layout={{
           title: "RMS Error",
@@ -42,18 +46,18 @@ const RMSChart: FC<RMSChartProps> = ({ rmsErrors, stepIndex, setStepIndex }) => 
               x0: stepIndex,
               x1: stepIndex,
               y0: 0,
-              y1: .5,
+              y1: 0.5,
               line: {
                 color: "red",
-                width: 2
-              }
-            }
-          ]
+                width: 2,
+              },
+            },
+          ],
         }}
         style={{ width: "100%", height: "100%" }}
         useResizeHandler
         config={{
-          editable: true // allow shape dragging
+          editable: true, // allow shape dragging
         }}
         // This fires whenever shapes or layout get updated
         onRelayout={(figure: Readonly<Plotly.PlotRelayoutEvent>) => {
@@ -62,7 +66,10 @@ const RMSChart: FC<RMSChartProps> = ({ rmsErrors, stepIndex, setStepIndex }) => 
           if (shapes && shapes[0] && shapes[0].x0 !== undefined) {
             const newX = shapes[0].x0 as number;
             // Convert to an integer step (or clamp if needed)
-            const newStep = Math.max(0, Math.min(Math.round(newX), rmsErrors.length - 1));
+            const newStep = Math.max(
+              0,
+              Math.min(Math.round(newX), rmsErrors.length - 1),
+            );
             setStepIndex(newStep);
           }
         }}

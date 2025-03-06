@@ -1,5 +1,5 @@
-import Layout from './Layout';
-import ErrorBoundary from './components/ErrorBoundary';
+import Layout from "./Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 const App = () => (
   <ErrorBoundary>

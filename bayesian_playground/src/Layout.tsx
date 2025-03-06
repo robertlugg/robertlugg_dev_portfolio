@@ -13,7 +13,8 @@ const Layout: FC = () => {
   const [stepIndex, setStepIndex] = useState(0);
   const [acquisitionFn, setAcquisitionFn] = useState("UCB"); // Default: "UCB"
   // Pass acquisitionFn to the hook
-  const { bayesianData, rmsErrors, totalSteps, setTotalSteps, logs } = useBayesianSimulation(acquisitionFn);
+  const { bayesianData, rmsErrors, totalSteps, setTotalSteps, logs } =
+    useBayesianSimulation(acquisitionFn);
 
   return (
     <Container maxWidth="lg" sx={{ padding: 2 }}>
@@ -35,8 +36,8 @@ const Layout: FC = () => {
 
         <Stack direction={{ xs: "column", md: "row" }} spacing={2}>
           <Box flex={1}>
-            <RMSChart 
-              rmsErrors={rmsErrors} 
+            <RMSChart
+              rmsErrors={rmsErrors}
               stepIndex={stepIndex}
               setStepIndex={setStepIndex}
             />

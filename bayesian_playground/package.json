@@ -15,12 +15,14 @@
     "@mui/icons-material": "^6.4.7",
     "@mui/material": "^6.4.6",
     "@types/mathjs": "^9.4.1",
+    "depcheck": "^1.4.7",
     "gaussian-process": "^0.0.1",
     "mathjs": "^14.3.0",
     "plotly.js": "^3.0.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-    "react-plotly.js": "^2.6.0"
+    "react-plotly.js": "^2.6.0",
+    "vitest": "^3.0.8"
   },
   "devDependencies": {
     "@eslint/js": "^9.21.0",

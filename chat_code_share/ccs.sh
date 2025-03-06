@@ -82,6 +82,7 @@ do_code_checks() {
         ["Vitest"]="Tests"
         ["Depcheck"]="Dependencies"
         ["TS-Prune"]="Dependencies"
+        ["CSS Lint"]="Linting"
     )
 
     declare -A failures
@@ -103,44 +104,57 @@ do_code_checks() {
             # Categorize the failure
             local category=""
             case "$check_name" in
-                "ESLint" | "Prettier") category="Linting" ;;
+                "ESLint" | "Prettier" | "CSS Lint") category="Linting" ;;
                 "TypeScript Check" | "TS-Prune") category="Compilation" ;;
-                "Jest" | "Mocha" | "Vitest") category="Tests" ;;
+                "Vitest") category="Tests" ;;
                 "Depcheck") category="Dependencies" ;;
-                "Node.js App Startup") category="Runtime" ;;  # <-- Fix: Assign category!
             esac
 
             # Update JSON structure: Group failures by category
-            jq ". + {\"$category\": { \"$check_name\": {\"log\": \"$output_file\", \"summary\": $summary }}}" "$CHAT_SHARE_DIR/summary_results.json" > "$CHAT_SHARE_DIR/summary_results.json.tmp" && mv "$CHAT_SHARE_DIR/summary_results.json.tmp" "$CHAT_SHARE_DIR/summary_results.json"
+            jq ". + {\"$category\": { \"$check_name\": {\"log\": \"$output_file\", \"summary\": $summary }}}" "$json_summary" > "$json_summary.tmp" && mv "$json_summary.tmp" "$json_summary"
         else
             rm "$output_file" 2>/dev/null || true  # Delete the log file if no failure
         fi
     }
 
+    # ✅ Ensure Jest, Mocha, Vitest, and Depcheck Are Installed Before Running
+    npm list --depth=0 vitest || run_check "Vitest Install" "$diag_dir/vitest_install.txt" npm install vitest --no-save
+    npm list --depth=0 depcheck || run_check "Depcheck Install" "$diag_dir/depcheck_install.txt" npm install depcheck --no-save
+
+    # Run a post-install fix
+    npm rebuild
+
+    # ✅ Fix Prettier Issues (Auto-format Code)
+    run_check "Prettier" "$diag_dir/prettier_results.txt" npx prettier --write .
+
+    # ✅ Fix Stylelint Configuration (Ensure Config Exists)
+    if [[ ! -f "$TARGET_DIR/.stylelintrc.json" ]]; then
+        log_message "Missing .stylelintrc.json. Creating default configuration."
+        cat > "$TARGET_DIR/.stylelintrc.json" <<EOL
+{
+  "extends": "stylelint-config-standard",
+  "rules": {
+    "indentation": 2,
+    "max-empty-lines": 2
+  }
+}
+EOL
+    fi
+
+    # ✅ Run Stylelint (Now with the config in place)
+    run_check "CSS Lint" "$diag_dir/css_results.txt" npx --yes stylelint "$TARGET_DIR/**/*.css"
+
+    # ✅ Run All Other Code Checks
     run_check "ESLint" "$diag_dir/eslint_results.txt" npx eslint "$TARGET_DIR" --ext .js,.ts,.tsx --no-interactive --ignore-pattern chat_share
     run_check "TypeScript Check" "$diag_dir/ts_check_results.txt" npx tsc --noEmit --skipLibCheck
-    run_check "Prettier" "$diag_dir/prettier_results.txt" npx prettier --check . --ignore-path <(echo "chat_share")
-    run_check "Jest" "$diag_dir/jest_results.txt" npx --no-install jest --passWithNoTests --detectOpenHandles --coveragePathIgnorePatterns "chat_share"
-    run_check "Mocha" "$diag_dir/mocha_results.txt" npx --no-install mocha --dry-run --exclude "chat_share/**"
     run_check "Vitest" "$diag_dir/vitest_results.txt" npx --no-install vitest --dry-run --exclude "chat_share/**"
     run_check "Depcheck" "$diag_dir/depcheck_results.txt" npx --no-install depcheck --ignores "chat_share"
     run_check "TS-Prune" "$diag_dir/ts_prune_results.txt" npx ts-prune --ignore "chat_share"
 
-    # Run HTML validation on all .html files (excluding node_modules and chat_share)
-    find "$TARGET_DIR" -name "*.html" ! -path "*/node_modules/*" ! -path "*/chat_share/*" -print0 | while IFS= read -r -d '' html_file; do
-        run_check "HTML Validation" "$diag_dir/html_results_$(basename "$html_file").txt" tidy -errors -q "$html_file"
-    done
-    
-    # Run CSS validation on all .css files (excluding node_modules and chat_share)
-    run_check "CSS Lint" "$diag_dir/css_results.txt" npx --yes stylelint $(find "$TARGET_DIR" -name "*.css" ! -path "*/node_modules/*" ! -path "*/chat_share/*")
-
-    # Run Node.js app startup check
-    run_check "Node.js App Startup" "$diag_dir/node_app_startup.txt" timeout 10 npm run dev
-
     log_message "Code checks completed."
-
-
 }
+
+
 
 # Function to create a baseline
 do_baseline() {

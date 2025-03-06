@@ -1,7 +1,7 @@
-import { FC } from 'react';
-import Plot from 'react-plotly.js';
-import { Paper, Typography } from '@mui/material';
-import ErrorBoundary from './ErrorBoundary';
+import { FC } from "react";
+import Plot from "react-plotly.js";
+import { Paper, Typography } from "@mui/material";
+import ErrorBoundary from "./ErrorBoundary";
 
 interface PlotWrapperProps {
   title: string;
@@ -10,7 +10,12 @@ interface PlotWrapperProps {
   height?: number;
 }
 
-const PlotWrapper: FC<PlotWrapperProps> = ({ title, data, width = 600, height = 400 }) => (
+const PlotWrapper: FC<PlotWrapperProps> = ({
+  title,
+  data,
+  width = 600,
+  height = 400,
+}) => (
   <ErrorBoundary>
     <Paper sx={{ padding: 2 }}>
       <Typography variant="h6">{title}</Typography>
