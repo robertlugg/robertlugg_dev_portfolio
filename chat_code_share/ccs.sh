@@ -37,6 +37,12 @@ log_message() {
     echo "$(date '+%Y-%m-%d %H:%M:%S') - $1" | tee -a "$LOG_FILE"
 }
 
+# Check if any commits exist
+if ! git -C "$TARGET_DIR" rev-parse --verify HEAD >/dev/null 2>&1; then
+    log_message "ERROR: No commits found in this repository. Please commit at least once before running ccs.sh."
+    exit 1
+fi
+
 # Function to run diagnostics
 do_diagnostics() {
     local diag_dir="$CHAT_SHARE_DIR/info_for_chat"
@@ -60,34 +66,65 @@ do_diagnostics() {
     log_message "Diagnostics saved to: $diag_file"
 }
 
-# Function to run all code checks
+# Function to run all code checks and store only failures
 do_code_checks() {
     local diag_dir="$CHAT_SHARE_DIR/info_for_chat"
     mkdir -p "$diag_dir"
+    local json_summary="$CHAT_SHARE_DIR/summary_results.json"
+    echo "{}" > "$json_summary"
 
-    log_message "Running ESLint..."
-    npx eslint "$TARGET_DIR" --ext .js,.ts,.tsx --no-interactive > "$diag_dir/eslint_results.txt" 2>&1 || log_message "ESLint completed with warnings/errors."
+    declare -A categories=( 
+        ["ESLint"]="Linting"
+        ["TypeScript Check"]="Compilation"
+        ["Prettier"]="Linting"
+        ["Jest"]="Tests"
+        ["Mocha"]="Tests"
+        ["Vitest"]="Tests"
+        ["Depcheck"]="Dependencies"
+        ["TS-Prune"]="Dependencies"
+    )
 
-    log_message "Running TypeScript checks..."
-    npx tsc --noEmit > "$diag_dir/ts_check_results.txt" 2>&1 || log_message "TypeScript check completed with warnings/errors."
+    declare -A failures
 
-    log_message "Running Prettier..."
-    npx prettier --check . > "$diag_dir/prettier_results.txt" 2>&1 || log_message "Prettier found issues."
+run_check() {
+    local check_name="$1"
+    local output_file="$2"
+    shift 2
 
-    log_message "Running Jest..."
-    npx --no-install jest --passWithNoTests --detectOpenHandles --no-install > "$diag_dir/jest_results.txt" 2>&1 || log_message "Jest completed with warnings/errors."
+    log_message "Running $check_name..."
+    
+    if ! "$@" > "$output_file" 2>&1; then
+        log_message "$check_name failed. Saving results."
 
-    log_message "Running Mocha..."
-    npx --no-install mocha --dry-run > "$diag_dir/mocha_results.txt" 2>&1 || log_message "Mocha completed with warnings/errors."
+        # Extract meaningful errors (if any) and escape JSON characters
+        local summary
+        summary=$(head -n 10 "$output_file" | tr '\n' '; ' | jq -Rsa .)
 
-    log_message "Running Vitest..."
-    npx --no-install vitest --dry-run > "$diag_dir/vitest_results.txt" 2>&1 || log_message "Vitest completed with warnings/errors."
+        # Categorize the failure
+        local category=""
+        case "$check_name" in
+            "ESLint" | "Prettier") category="Linting" ;;
+            "TypeScript Check" | "TS-Prune") category="Compilation" ;;
+            "Jest" | "Mocha" | "Vitest") category="Tests" ;;
+            "Depcheck") category="Dependencies" ;;
+        esac
 
-    log_message "Running Depcheck..."
-    npx --no-install depcheck > "$diag_dir/depcheck_results.txt" 2>&1 || log_message "Depcheck found issues."
+        # Update JSON structure: Group failures by category
+        jq ". + {\"$category\": { \"$check_name\": {\"log\": \"$output_file\", \"summary\": $summary }}}" "$CHAT_SHARE_DIR/summary_results.json" > "$CHAT_SHARE_DIR/summary_results.json.tmp" && mv "$CHAT_SHARE_DIR/summary_results.json.tmp" "$CHAT_SHARE_DIR/summary_results.json"
+    else
+        rm "$output_file" 2>/dev/null || true  # Delete the log file if no failure
+    fi
+}
 
-    log_message "Running TS-Prune..."
-    npx ts-prune > "$diag_dir/ts_prune_results.txt" 2>&1 || log_message "TS-Prune found unused exports."
+run_check "ESLint" "$diag_dir/eslint_results.txt" npx eslint "$TARGET_DIR" --ext .js,.ts,.tsx --no-interactive
+run_check "TypeScript Check" "$diag_dir/ts_check_results.txt" npx tsc --noEmit
+run_check "Prettier" "$diag_dir/prettier_results.txt" npx prettier --check .
+run_check "Jest" "$diag_dir/jest_results.txt" npx --no-install jest --passWithNoTests --detectOpenHandles
+run_check "Mocha" "$diag_dir/mocha_results.txt" npx --no-install mocha --dry-run
+run_check "Vitest" "$diag_dir/vitest_results.txt" npx --no-install vitest --dry-run
+run_check "Depcheck" "$diag_dir/depcheck_results.txt" npx --no-install depcheck
+run_check "TS-Prune" "$diag_dir/ts_prune_results.txt" npx ts-prune
+
 
     log_message "Code checks completed."
 }
@@ -98,7 +135,7 @@ do_baseline() {
     local baseline_file="$CHAT_SHARE_DIR/baseline_${baseline_commit}.tar.gz"
     local baseline_dir="$CHAT_SHARE_DIR/project"
 
-    log_message "Creating baseline from commit $baseline_commit..."
+    log_message "WARNING: Creating baseline from the last commit ($baseline_commit), not the current files."
     mkdir -p "$baseline_dir"
     git -C "$TARGET_DIR" archive --format=tar -o "$CHAT_SHARE_DIR/repo_files.tar" "$baseline_commit"
     tar -xf "$CHAT_SHARE_DIR/repo_files.tar" -C "$baseline_dir"
@@ -112,57 +149,132 @@ do_baseline() {
     log_message "Baseline saved: $baseline_file"
 }
 
+# Function to create diffs
 do_diffs() {
     local current_commit="$(git_latest_commit)"
     local baseline_commit="$(get_stored_commit baseline)"
     local last_diff_commit="$(get_stored_commit last_diff)"
 
-    # Skip diff generation if nothing has changed
-    if [[ "$current_commit" == "$baseline_commit" ]]; then
-        log_message "No changes detected since the baseline. Skipping diff generation."
-        exit 0
+    if [[ -z "$last_diff_commit" ]]; then
+        last_diff_commit="$baseline_commit"
     fi
 
-    log_message "Generating diffs..."
+    log_message "Generating diffs from baseline ($baseline_commit) and last diff ($last_diff_commit) to working directory..."
 
-    local cumulative_diff_file="$CHAT_SHARE_DIR/cumulative_${baseline_commit}_to_${current_commit}.tar.gz"
-    local incremental_diff_file="$CHAT_SHARE_DIR/incremental_${last_diff_commit}_to_${current_commit}.tar.gz"
+    local cumulative_diff_file="$CHAT_SHARE_DIR/cumulative_from_baseline.tar.gz"
+    local incremental_diff_file="$CHAT_SHARE_DIR/incremental_from_${last_diff_commit}.tar.gz"
 
+    git -C "$TARGET_DIR" diff "$baseline_commit" > "$CHAT_SHARE_DIR/repo_changes.patch"
+    git -C "$TARGET_DIR" diff "$last_diff_commit" > "$CHAT_SHARE_DIR/incremental_changes.patch"
+    git -C "$TARGET_DIR" diff --stat "$last_diff_commit" > "$CHAT_SHARE_DIR/repo_changes_stat.txt"
 
-    # Generate cumulative diff
-    git -C "$TARGET_DIR" diff "$baseline_commit" "$current_commit" > "$CHAT_SHARE_DIR/repo_changes.patch"
-
-    # Run diagnostics and checks
-    do_diagnostics #
+    do_diagnostics
     do_code_checks
 
-    # Save only the differences in system diagnostics
-    diff -u "$CHAT_SHARE_DIR/info_for_chat/system_info.txt" "$CHAT_SHARE_DIR/system_info_${current_commit}.txt" > "$CHAT_SHARE_DIR/info_for_chat/system_info_diff.txt" || true
+    tar -czf "$cumulative_diff_file" -C "$CHAT_SHARE_DIR" repo_changes.patch repo_changes_stat.txt summary_results.json
+    tar -czf "$incremental_diff_file" -C "$CHAT_SHARE_DIR" incremental_changes.patch repo_changes_stat.txt summary_results.json
 
-    # Package cumulative diff
-    tar -czf "$cumulative_diff_file" -C "$CHAT_SHARE_DIR" repo_changes.patch info_for_chat/system_info_diff.txt
-    log_message "Cumulative diff saved: $cumulative_diff_file"
+    store_commit "last_diff" "$current_commit"
+}
 
-    # Package incremental diff only if it was generated
-    if [[ -f "$CHAT_SHARE_DIR/incremental_changes.patch" ]]; then
-        tar -czf "$incremental_diff_file" -C "$CHAT_SHARE_DIR" incremental_changes.patch info_for_chat/system_info_diff.txt
-        log_message "Incremental diff saved: $incremental_diff_file"
-        store_commit "last_diff" "$current_commit"
-    fi
+generate_instruction_file() {
+    local instruction_file="$CHAT_SHARE_DIR/analysis_instructions.txt"
+
+    cat > "$instruction_file" <<EOL
+Helper Instructions for File Analysis
+
+1. File Structure & Expected Content
+
+   Baseline Archive Contents:
+   - tracking_info.txt -> Metadata
+   - project/ccs.sh -> Main script (may change)
+   - info_for_chat/ -> Directory containing test results:
+       - mocha_results.txt
+       - depcheck_results.txt
+       - vitest_results.txt
+       - eslint_results.txt
+       - jest_results.txt
+       - ts_prune_results.txt
+       - ts_check_results.txt
+
+   Cumulative Archive Contents:
+   - repo_changes.patch -> The actual code changes
+   - repo_changes_stat.txt -> Summary of file modifications
+   - summary_results.json -> Test & check results (structured JSON format)
+
+2. Priority Files to Analyze
+   - summary_results.json (contains all test/check failures)
+   - repo_changes_stat.txt (high-level summary of changed files)
+   - repo_changes.patch (actual code modifications)
+
+3. Skipped or Low-Priority Files
+   - tracking_info.txt (only metadata)
+   - system_info.txt (only needed if debugging system dependencies)
+
+4. Parsing Guidelines (Expected Formats & Keywords)
+
+   summary_results.json:
+   - Only process failed tests (ignore passed tests)
+   - Each entry follows:
+     {
+       "Test Name": {
+         "log": "<log file path>",
+         "summary": "<brief error description>"
+       }
+     }
+
+   repo_changes_stat.txt:
+   - Follows "file | X insertions(+), Y deletions(-)" format
+   - Extract filenames and number of changes
+
+   repo_changes.patch:
+   - Standard git diff format
+   - Focus on function changes (avoid whitespace-only modifications)
+
+5. Expected Failure Patterns & Common Fixes
+
+   ESLint:
+   - "Invalid option '--interactive'" → Outdated ESLint CLI command
+   - "Unexpected token" → Likely syntax issue in modified files
+
+   Jest/Mocha/Vitest:
+   - "npx canceled due to missing packages" → npm install required
+   - "Cannot find module" → Check package.json dependencies
+
+   TS-Prune:
+   - "File not found: tsconfig.json" → Ensure correct tsconfig.json path
+
+6. Processing Order (Optimization Strategy)
+   - Load summary_results.json (extract failures first)
+   - Parse repo_changes_stat.txt (check what files changed)
+   - Analyze repo_changes.patch (only if function logic changed)
+   - Skip system_info.txt unless dependency errors appear
+
+EOL
+
+    log_message "Generated analysis instructions: $instruction_file"
 }
 
 
-# Determine if baseline needs to be created
 
-baseline_file=$(echo "$CHAT_SHARE_DIR"/baseline_*.tar.gz)
-baseline_exists=$(test -f "$baseline_file" && echo 1 || echo 0)
 
-if [[ ! -d "$CHAT_SHARE_DIR" || "$baseline_exists" -eq 0 ]]; then
-    log_message "No existing chat_share directory or baseline found. Creating a new baseline..."
+if [[ ! -d "$CHAT_SHARE_DIR" ]]; then
+    log_message "No chat_share directory found. Creating a new baseline..."
     do_baseline
+    generate_instruction_file
+    exit 0
+fi
+
+baseline_file=$(find "$CHAT_SHARE_DIR" -maxdepth 1 -name "baseline_*.tar.gz" | head -n 1)
+
+if [[ -z "$baseline_file" ]]; then
+    log_message "No baseline found in chat_share directory. Creating a new baseline..."
+    do_baseline
+    generate_instruction_file
     exit 0
 fi
 
 
-# If chat_share exists and baseline is present, generate diffs
+
 do_diffs
+generate_instruction_file
