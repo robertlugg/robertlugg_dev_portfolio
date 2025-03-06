@@ -1,0 +1,28 @@
+/* Apply a basic reset and global styles */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Set default font and background */
+body {
+  font-family: Arial, sans-serif;
+  background-color: #f4f4f4;
+  color: #333;
+  text-align: center;
+  padding: 20px;
+}
+
+/* Ensure links look good */
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+/* Make sure buttons are styled consistently */
+button {
+  cursor: pointer;
+  font-size: 16px;
+  padding: 10px 20px;
+}
