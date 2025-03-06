@@ -128,12 +128,6 @@ do_diffs() {
     local cumulative_diff_file="$CHAT_SHARE_DIR/cumulative_${baseline_commit}_to_${current_commit}.tar.gz"
     local incremental_diff_file="$CHAT_SHARE_DIR/incremental_${last_diff_commit}_to_${current_commit}.tar.gz"
 
-    # Generate Git patch only if last_diff_commit exists
-    if [[ -n "$last_diff_commit" ]]; then
-        git -C "$TARGET_DIR" diff "$last_diff_commit" "$current_commit" > "$CHAT_SHARE_DIR/incremental_changes.patch"
-    else
-        log_message "No previous diff found. Skipping incremental diff."
-    fi
 
     # Generate cumulative diff
     git -C "$TARGET_DIR" diff "$baseline_commit" "$current_commit" > "$CHAT_SHARE_DIR/repo_changes.patch"
