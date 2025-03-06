@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Default values
-TARGET_DIR="$(pwd)"
+TARGET_DIR="$(realpath .)"  # "$(pwd)"
 CHAT_SHARE_DIR="$TARGET_DIR/chat_share"
 LOG_FILE="$CHAT_SHARE_DIR/log.txt"
 
@@ -86,47 +86,60 @@ do_code_checks() {
 
     declare -A failures
 
-run_check() {
-    local check_name="$1"
-    local output_file="$2"
-    shift 2
+    run_check() {
+        local check_name="$1"
+        local output_file="$2"
+        shift 2
 
-    log_message "Running $check_name..."
+        log_message "Running $check_name..."
+        
+        if ! "$@" > "$output_file" 2>&1; then
+            log_message "$check_name failed. Saving results."
+
+            # Extract meaningful errors (if any) and escape JSON characters
+            local summary
+            summary=$(head -n 10 "$output_file" | tr '\n' '; ' | jq -Rsa .)
+
+            # Categorize the failure
+            local category=""
+            case "$check_name" in
+                "ESLint" | "Prettier") category="Linting" ;;
+                "TypeScript Check" | "TS-Prune") category="Compilation" ;;
+                "Jest" | "Mocha" | "Vitest") category="Tests" ;;
+                "Depcheck") category="Dependencies" ;;
+                "Node.js App Startup") category="Runtime" ;;  # <-- Fix: Assign category!
+            esac
+
+            # Update JSON structure: Group failures by category
+            jq ". + {\"$category\": { \"$check_name\": {\"log\": \"$output_file\", \"summary\": $summary }}}" "$CHAT_SHARE_DIR/summary_results.json" > "$CHAT_SHARE_DIR/summary_results.json.tmp" && mv "$CHAT_SHARE_DIR/summary_results.json.tmp" "$CHAT_SHARE_DIR/summary_results.json"
+        else
+            rm "$output_file" 2>/dev/null || true  # Delete the log file if no failure
+        fi
+    }
+
+    run_check "ESLint" "$diag_dir/eslint_results.txt" npx eslint "$TARGET_DIR" --ext .js,.ts,.tsx --no-interactive --ignore-pattern chat_share
+    run_check "TypeScript Check" "$diag_dir/ts_check_results.txt" npx tsc --noEmit --skipLibCheck
+    run_check "Prettier" "$diag_dir/prettier_results.txt" npx prettier --check . --ignore-path <(echo "chat_share")
+    run_check "Jest" "$diag_dir/jest_results.txt" npx --no-install jest --passWithNoTests --detectOpenHandles --coveragePathIgnorePatterns "chat_share"
+    run_check "Mocha" "$diag_dir/mocha_results.txt" npx --no-install mocha --dry-run --exclude "chat_share/**"
+    run_check "Vitest" "$diag_dir/vitest_results.txt" npx --no-install vitest --dry-run --exclude "chat_share/**"
+    run_check "Depcheck" "$diag_dir/depcheck_results.txt" npx --no-install depcheck --ignores "chat_share"
+    run_check "TS-Prune" "$diag_dir/ts_prune_results.txt" npx ts-prune --ignore "chat_share"
+
+    # Run HTML validation on all .html files (excluding node_modules and chat_share)
+    find "$TARGET_DIR" -name "*.html" ! -path "*/node_modules/*" ! -path "*/chat_share/*" -print0 | while IFS= read -r -d '' html_file; do
+        run_check "HTML Validation" "$diag_dir/html_results_$(basename "$html_file").txt" tidy -errors -q "$html_file"
+    done
     
-    if ! "$@" > "$output_file" 2>&1; then
-        log_message "$check_name failed. Saving results."
+    # Run CSS validation on all .css files (excluding node_modules and chat_share)
+    run_check "CSS Lint" "$diag_dir/css_results.txt" npx --yes stylelint $(find "$TARGET_DIR" -name "*.css" ! -path "*/node_modules/*" ! -path "*/chat_share/*")
 
-        # Extract meaningful errors (if any) and escape JSON characters
-        local summary
-        summary=$(head -n 10 "$output_file" | tr '\n' '; ' | jq -Rsa .)
-
-        # Categorize the failure
-        local category=""
-        case "$check_name" in
-            "ESLint" | "Prettier") category="Linting" ;;
-            "TypeScript Check" | "TS-Prune") category="Compilation" ;;
-            "Jest" | "Mocha" | "Vitest") category="Tests" ;;
-            "Depcheck") category="Dependencies" ;;
-        esac
-
-        # Update JSON structure: Group failures by category
-        jq ". + {\"$category\": { \"$check_name\": {\"log\": \"$output_file\", \"summary\": $summary }}}" "$CHAT_SHARE_DIR/summary_results.json" > "$CHAT_SHARE_DIR/summary_results.json.tmp" && mv "$CHAT_SHARE_DIR/summary_results.json.tmp" "$CHAT_SHARE_DIR/summary_results.json"
-    else
-        rm "$output_file" 2>/dev/null || true  # Delete the log file if no failure
-    fi
-}
-
-run_check "ESLint" "$diag_dir/eslint_results.txt" npx eslint "$TARGET_DIR" --ext .js,.ts,.tsx --no-interactive
-run_check "TypeScript Check" "$diag_dir/ts_check_results.txt" npx tsc --noEmit
-run_check "Prettier" "$diag_dir/prettier_results.txt" npx prettier --check .
-run_check "Jest" "$diag_dir/jest_results.txt" npx --no-install jest --passWithNoTests --detectOpenHandles
-run_check "Mocha" "$diag_dir/mocha_results.txt" npx --no-install mocha --dry-run
-run_check "Vitest" "$diag_dir/vitest_results.txt" npx --no-install vitest --dry-run
-run_check "Depcheck" "$diag_dir/depcheck_results.txt" npx --no-install depcheck
-run_check "TS-Prune" "$diag_dir/ts_prune_results.txt" npx ts-prune
-
+    # Run Node.js app startup check
+    run_check "Node.js App Startup" "$diag_dir/node_app_startup.txt" timeout 10 npm run dev
 
     log_message "Code checks completed."
+
+
 }
 
 # Function to create a baseline
@@ -171,11 +184,23 @@ do_diffs() {
     do_diagnostics
     do_code_checks
 
-    tar -czf "$cumulative_diff_file" -C "$CHAT_SHARE_DIR" repo_changes.patch repo_changes_stat.txt summary_results.json
-    tar -czf "$incremental_diff_file" -C "$CHAT_SHARE_DIR" incremental_changes.patch repo_changes_stat.txt summary_results.json
+    # Ensure required files exist before archiving
+    if [[ ! -f "$CHAT_SHARE_DIR/repo_changes.patch" || ! -f "$CHAT_SHARE_DIR/summary_results.json" ]]; then
+        log_message "ERROR: Required diff files are missing! Skipping diff creation."
+        exit 1
+    fi
+
+    tar -czf "$cumulative_diff_file" -C "$CHAT_SHARE_DIR" \
+        repo_changes.patch repo_changes_stat.txt summary_results.json info_for_chat analysis_instructions.txt
+    log_message "Cumulative diff saved: $cumulative_diff_file"
+
+    tar -czf "$incremental_diff_file" -C "$CHAT_SHARE_DIR" \
+        incremental_changes.patch repo_changes_stat.txt summary_results.json info_for_chat analysis_instructions.txt
+    log_message "Incremental diff saved: $incremental_diff_file"
 
     store_commit "last_diff" "$current_commit"
 }
+
 
 generate_instruction_file() {
     local instruction_file="$CHAT_SHARE_DIR/analysis_instructions.txt"
