@@ -139,7 +139,7 @@ do_diffs() {
     git -C "$TARGET_DIR" diff "$baseline_commit" "$current_commit" > "$CHAT_SHARE_DIR/repo_changes.patch"
 
     # Run diagnostics and checks
-    do_diagnostics
+    do_diagnostics #
     do_code_checks
 
     # Save only the differences in system diagnostics
